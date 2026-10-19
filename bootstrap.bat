@@ -9,13 +9,13 @@ if not exist ".build\bin" mkdir ".build\bin"
 
 echo [BOOTSTRAP] Compiling build runner...
 
-cl.exe /nologo /W4 /std:clatest /MD /c buildsys\build.c /Fo.build\obj\bootstrap.obj
+cl.exe /nologo /W4 /std:clatest /MD /c buildsys\build.c /Fo.build\obj\build.c.obj
 
 if errorlevel 1 exit /b 1
 
 echo [BOOTSTRAP] Linking build runner...
 
-link.exe /NOLOGO .build\obj\bootstrap.obj /OUT:.build\bin\build.exe
+link.exe /NOLOGO .build\obj\build.c.obj /OUT:.build\bin\build.exe
 
 if errorlevel 1 exit /b 1
 
