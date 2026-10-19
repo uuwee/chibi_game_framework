@@ -7,12 +7,7 @@
 #include <direct.h>
 #include <process.h>
 
-typedef struct BuildTarget {
-  const char *name;
-  const char **source;
-  const uint32_t source_count;
-  const char *output;
-} BuildTarget;
+#include "build.h"
 
 typedef struct CompileUnit {
   const char *source;
@@ -113,20 +108,27 @@ static int link_target(const BuildTarget *target, const CompileUnit *units,
   }
 
   char output_flag[512];
-  int length =
-      snprintf(output_flag, sizeof(output_flag), "/OUT:%s", target->output);
-
+  int length = -1;
+  if (target->type == BUILD_TYPE_EXE) {
+    // TODO: check if target->output ends with ".exe"
+    length =
+        snprintf(output_flag, sizeof(output_flag), " /OUT:%s", target->output);
+  } else if (target->type == BUILD_TYPE_DLL) {
+    // TODO: check if target->output ends with ".dll"
+    length = snprintf(output_flag, sizeof(output_flag), "/DLL /OUT:%s",
+                      target->output);
+  }
   if (length < 0 || (size_t)length >= sizeof(output_flag)) {
     return 1;
   }
 
-  const char *const args[] = {"link.exe",      "/NOLOGO",   "/INCREMENTAL:NO",
+  const char *const args[] = {"link.exe",       "/NOLOGO",   "/INCREMENTAL:NO",
                               object_path_list, output_flag, NULL};
 
   return run_process(args);
 }
 
-static int build_target(const BuildTarget *target) {
+ int build_target(const BuildTarget *target) {
   printf("[BUILD] %s\n", target->name);
 
   if (prepare_directories()) {
@@ -164,48 +166,3 @@ static int build_target(const BuildTarget *target) {
   return 0;
 }
 
-static const BuildTarget target_self = {
-    .name = "build_runner",
-    .source = (const char *[]){"buildsys/build.c"},
-    .source_count = 1,
-    .output = ".build/bin/runtime.exe",
-};
-
-static const BuildTarget target_runtime = {
-    .name = "runtime",
-    .source = (const char *[]){"runtime/main.c", "runtime/sub.c"},
-    .source_count = 2,
-    .output = ".build/bin/runtime.exe",
-};
-
-int main(int argc, char **argv) {
-  const char *command = "all";
-
-  if (argc >= 2) {
-    command = argv[1];
-  }
-
-  if (argc > 2) {
-    printf("Too many arguments.\n");
-    return 1;
-  }
-
-  if (strcmp(command, "self") == 0) {
-    return build_target(&target_self);
-  }
-
-  if (strcmp(command, "runtime") == 0) {
-    return build_target(&target_runtime);
-  }
-
-  if (strcmp(command, "all") == 0) {
-    if (build_target(&target_self)) {
-      return 1;
-    }
-
-    return build_target(&target_runtime);
-  }
-
-  printf("Usage: build [self | runtime | all]\n");
-  return 1;
-}
