@@ -71,10 +71,10 @@ static int compile_unit(const CompileUnit *unit, const char *option) {
     return 1;
   }
 
-  const char *const args[] = {"cl.exe",       "/nologo",   "/W4",
-                              "/std:clatest", "/Od",       "/MD",
-                              "/c",           "/Z7",       option ? option : "",
-                              unit->source,   object_flag, NULL};
+  const char *const args[] = {
+      "cl.exe",     "/nologo",   "/W4", "/std:clatest", "/Od",
+      "/MD",        "/utf-8",     "/c",  "/Z7",          option ? option : "",
+      unit->source, object_flag, NULL};
 
   return run_process(args);
 }
@@ -83,12 +83,13 @@ static int make_object_path(const char *source, char *buffer,
                             size_t buffer_size) {
   char name[512];
   int copied = snprintf(name, sizeof(name), "%s", source);
-  if (copied < 0 || (size_t)copied >= sizeof(name)) return 1;
+  if (copied < 0 || (size_t)copied >= sizeof(name))
+    return 1;
   for (char *p = name; *p; ++p) {
-    if (*p == '/' || *p == '\\' || *p == ':') *p = '_';
+    if (*p == '/' || *p == '\\' || *p == ':')
+      *p = '_';
   }
-  int length =
-      snprintf(buffer, buffer_size, ".build/obj/%s.obj", name);
+  int length = snprintf(buffer, buffer_size, ".build/obj/%s.obj", name);
   if (length < 0 || (size_t)length >= buffer_size) {
     return 1;
   }
@@ -102,9 +103,9 @@ static int link_target(const BuildTarget *target, const CompileUnit *units,
   char *head = object_path_list;
   size_t remaining = sizeof(object_path_list);
   for (size_t i = 0; i < unit_count; i++) {
-    int length =
-        snprintf(head, remaining, "\"%s\" ", units[i].object);
-    if (length < 0 || (size_t)length >= remaining) return 1;
+    int length = snprintf(head, remaining, "\"%s\" ", units[i].object);
+    if (length < 0 || (size_t)length >= remaining)
+      return 1;
     head += length;
     remaining -= (size_t)length;
   }
@@ -113,8 +114,8 @@ static int link_target(const BuildTarget *target, const CompileUnit *units,
   int length = -1;
   if (target->type == BUILD_TYPE_EXE) {
     // TODO: check if target->output ends with ".exe"
-    length =
-        snprintf(output_flag, sizeof(output_flag), "/OUT:\"%s\"", target->output);
+    length = snprintf(output_flag, sizeof(output_flag), "/OUT:\"%s\"",
+                      target->output);
   } else if (target->type == BUILD_TYPE_DLL) {
     // TODO: check if target->output ends with ".dll"
     length = snprintf(output_flag, sizeof(output_flag), "/DLL /OUT:\"%s\"",

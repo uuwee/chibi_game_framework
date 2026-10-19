@@ -47,6 +47,7 @@ static void unload_module(Script *script) {
 }
 
 static bool reload_script(Script *script, const CGF_API *engine) {
+  // 新旧のdllを区別するため(上書きを防ぐため)に、世代を保存する必要があります。
   static unsigned long generation;
   Script candidate = {0};
   if (build_target(&target_script)) {
