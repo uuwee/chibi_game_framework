@@ -9,7 +9,8 @@
 
 typedef struct BuildTarget {
   const char *name;
-  const char *source;
+  const char **source;
+  const uint32_t source_count;
   const char *output;
 } BuildTarget;
 
@@ -103,8 +104,15 @@ static int make_object_path(const char *source, char *buffer,
 
 static int link_target(const BuildTarget *target, const CompileUnit *units,
                        size_t unit_count) {
-  char output_flag[512];
+  char object_path_list[1024 * 8];
+  char *head = object_path_list;
+  for (size_t i = 0; i < unit_count; i++) {
+    int length =
+        snprintf(head, sizeof(object_path_list), "%s ", units[i].object);
+    head += length;
+  }
 
+  char output_flag[512];
   int length =
       snprintf(output_flag, sizeof(output_flag), "/OUT:%s", target->output);
 
@@ -113,7 +121,7 @@ static int link_target(const BuildTarget *target, const CompileUnit *units,
   }
 
   const char *const args[] = {"link.exe",      "/NOLOGO",   "/INCREMENTAL:NO",
-                              units[0].object, output_flag, NULL};
+                              object_path_list, output_flag, NULL};
 
   return run_process(args);
 }
@@ -125,16 +133,18 @@ static int build_target(const BuildTarget *target) {
     return 1;
   }
 
-  uint32_t compile_units_count = 1;
+  uint32_t compile_units_count = target->source_count;
   CompileUnit *compile_units =
       (CompileUnit *)malloc(sizeof(CompileUnit) * compile_units_count);
   if (!compile_units) {
     printf("[ERROR] failed to allocate compile units\n");
   }
+
   for (uint32_t i = 0; i < compile_units_count; i++) {
-    compile_units[i].source = target->source;
-    const int result = make_object_path(target->source, compile_units[i].object,
-                                        sizeof(compile_units[i].object));
+    compile_units[i].source = target->source[i];
+    const int result =
+        make_object_path(target->source[i], compile_units[i].object,
+                         sizeof(compile_units[i].object));
     if (result != 0) {
       printf("[ERROR] failed to create object path: %d\n", result);
     }
@@ -156,13 +166,15 @@ static int build_target(const BuildTarget *target) {
 
 static const BuildTarget target_self = {
     .name = "build_runner",
-    .source = "buildsys/build.c",
+    .source = (const char *[]){"buildsys/build.c"},
+    .source_count = 1,
     .output = ".build/bin/runtime.exe",
 };
 
 static const BuildTarget target_runtime = {
     .name = "runtime",
-    .source = "runtime/main.c",
+    .source = (const char *[]){"runtime/main.c", "runtime/sub.c"},
+    .source_count = 2,
     .output = ".build/bin/runtime.exe",
 };
 
