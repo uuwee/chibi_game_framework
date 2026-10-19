@@ -129,25 +129,7 @@ static void close_script(Script *script, const CGF_API *engine) {
   unload_module(script);
 }
 
-static bool enter_repository(void) {
-  wchar_t executable[512];
-  DWORD length = GetModuleFileNameW(NULL, executable, 512);
-  if (!length || length >= 512)
-    return false;
-  wchar_t *separator = wcsrchr(executable, L'\\');
-  if (!separator)
-    return false;
-  *separator = L'\0';
-  return SetCurrentDirectoryW(executable) && SetCurrentDirectoryW(L"../..");
-}
-
 int main() {
-  setvbuf(stdout, NULL, _IONBF, 0);
-  SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
-  if (!enter_repository()) {
-    windows_error("Locate repository from .build/bin/runtime.exe");
-    return 1;
-  }
   const CGF_API *engine = engine_get_api();
   Script script = {0};
   if (!engine_open_window(800, 600, "Chibi sandbox - F5 reload")) {
