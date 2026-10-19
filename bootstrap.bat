@@ -10,6 +10,7 @@ if not exist ".build\bin" mkdir ".build\bin"
 echo [BOOTSTRAP] Compiling build runner...
 
 cl.exe /nologo /W4 /std:clatest /MD /c buildsys\build.c /Fo.build\obj\build.c.obj
+if errorlevel 1 exit /b 1
 cl.exe /nologo /W4 /std:clatest /MD /c buildsys\main.c /Fo.build\obj\main.c.obj
 
 if errorlevel 1 exit /b 1

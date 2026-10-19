@@ -14,8 +14,8 @@ static const BuildTarget target_self = {
 static const BuildTarget target_runtime = {
     .type = BUILD_TYPE_EXE,
     .name = "runtime",
-    .source =
-        (const char *[]){"runtime/main.c", "runtime/sub.c", "buildsys/build.c"},
+    .source = (const char *[]){"runtime/main.c", "buildsys/build.c",
+                               "engine/engine.c"},
     .source_count = 3,
     .output = ".build/bin/runtime.exe",
 };

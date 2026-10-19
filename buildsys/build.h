@@ -14,6 +14,7 @@ typedef struct BuildTarget {
   const char **source;
   const uint32_t source_count;
   const char *output;
+  const char *option;
 } BuildTarget;
 
 int build_target(const BuildTarget *target);
