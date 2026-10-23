@@ -46,7 +46,7 @@ static void unload_module(Script *script) {
   script->loaded_path[0] = L'\0';
 }
 
-static bool reload_script(Script *script, const CGF_API *engine) {
+static bool reload_script(Script *script, const CGF_EngineAPI *engine) {
   // 新旧のdllを区別するため(上書きを防ぐため)に、世代を保存する必要があります。
   static unsigned long generation;
   Script candidate = {0};
@@ -88,9 +88,8 @@ static bool reload_script(Script *script, const CGF_API *engine) {
   memcpy(&get_api, &symbol, sizeof(get_api));
   candidate.api = get_api();
   const CGF_ScriptAPI *api = candidate.api;
-  if (!api || api->struct_size != sizeof(CGF_ScriptAPI) ||
-      api->abi_version != CGF_ABI_VERSION || !api->state_size || !api->init ||
-      !api->update || !api->render || !api->fini) {
+  if (!api || api->struct_size != sizeof(CGF_ScriptAPI) || !api->state_size ||
+      !api->init || !api->update || !api->render || !api->fini) {
     engine->log("[RELOAD] invalid script API; keeping current script");
     goto fail;
   }
@@ -122,7 +121,7 @@ fail:
   return false;
 }
 
-static void close_script(Script *script, const CGF_API *engine) {
+static void close_script(Script *script, const CGF_EngineAPI *engine) {
   if (script->module)
     script->api->fini(script->state, engine);
   free(script->state);
@@ -131,7 +130,7 @@ static void close_script(Script *script, const CGF_API *engine) {
 }
 
 int main() {
-  const CGF_API *engine = engine_get_api();
+  const CGF_EngineAPI *engine = engine_get_api();
   Script script = {0};
   if (!engine_open_window(800, 600, "Chibi sandbox - F5 reload")) {
     windows_error("Open window");

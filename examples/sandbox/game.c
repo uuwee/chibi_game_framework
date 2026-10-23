@@ -1,4 +1,4 @@
-#include "engine.h"
+#include "../../engine/engine.h"
 #include <stdio.h>
 
 typedef struct State {
@@ -6,13 +6,13 @@ typedef struct State {
   float player_y;
 } State;
 
-static void game_init(void *state, const CGF_API *engine) {
+static void game_init(void *state, const CGF_EngineAPI *engine) {
   State *s = state;
   *s = (State){.player_x = 380.0f, .player_y = 280.0f};
   engine->log("[GAME] initialized");
 }
 
-static void game_update(void *state, const CGF_API *engine, float dt) {
+static void game_update(void *state, const CGF_EngineAPI *engine, float dt) {
   State *s = state;
   const float speed = 180.0f;
   s->player_x += ((float)engine->key_down(CGF_KEY_RIGHT) -
@@ -25,7 +25,7 @@ static void game_update(void *state, const CGF_API *engine, float dt) {
   if (s->player_y > 560) s->player_y = 560;
 }
 
-static void game_render(void *state, const CGF_API *engine) {
+static void game_render(void *state, const CGF_EngineAPI *engine) {
   const State *s = state;
   char text[128];
   engine->draw_text("Arrows: move | F5: rebuild/reload | Esc: quit",
@@ -35,7 +35,7 @@ static void game_render(void *state, const CGF_API *engine) {
   engine->draw_rect(s->player_x, s->player_y, 40, 40, 0.3f, 0.8f, 0.6f);
 }
 
-static void game_fini(void *state, const CGF_API *engine) {
+static void game_fini(void *state, const CGF_EngineAPI *engine) {
   const State *s = state;
   char message[128];
   snprintf(message, sizeof(message), "[GAME] finished at (%.1f, %.1f)",
@@ -46,7 +46,6 @@ static void game_fini(void *state, const CGF_API *engine) {
 CGF_EXPORT const CGF_ScriptAPI *script_get_api(void) {
   static const CGF_ScriptAPI api = {
       .struct_size = sizeof(CGF_ScriptAPI),
-      .abi_version = CGF_ABI_VERSION,
       .state_version = 1,
       .state_size = sizeof(State),
       .init = game_init,

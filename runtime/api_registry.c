@@ -1,7 +1,7 @@
 #include "include/runtime.h"
 
 #include <string.h>
-
+#include <stdlib.h>
 
 typedef struct PluginEntry {
   char *name;
@@ -18,7 +18,7 @@ typedef struct PluginEntry {
 PluginEntry plugin_entries[PLUGIN_ENTRY_MAX];
 uint32_t plugin_entries_count = 0;
 
-const void *get(const char *name, uint32_t version, size_t size) {
+const void *get(const char *name, size_t size) {
   if (name == NULL) {
     return NULL;
   }
@@ -60,4 +60,14 @@ void *get_or_create_state(const char *name, size_t size, size_t alignment,
 
   return NULL;
 }
+
+bool set(const char *name, size_t size, const void *api) {}
+
+static const CGF_APIRegistry api_registry = {
+    .set = set,
+    .get = get,
+    .get_or_create_state = get_or_create_state,
+};
+
+const CGF_APIRegistry *cgf_api_registry_get_api(void) { return &api_registry; }
 

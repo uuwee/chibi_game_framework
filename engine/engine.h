@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define CGF_ABI_VERSION 1u
+#include "../runtime/include/runtime.h"
 
 typedef enum CGF_Key {
   CGF_KEY_LEFT,
@@ -18,14 +18,13 @@ typedef enum CGF_Key {
 
 typedef struct CGF_EngineAPI {
   uint32_t struct_size;
-  uint32_t abi_version;
 
   void (*log)(const char *message);
   bool (*key_down)(CGF_Key key);
   void (*draw_rect)(float x, float y, float w, float h, float r, float g,
                     float b);
   void (*draw_text)(const char *text, int x, int y, int size, uint32_t color);
-} CGF_API;
+} CGF_EngineAPI;
 
 typedef struct CGF_ScriptAPI {
   uint32_t struct_size;
@@ -36,13 +35,13 @@ typedef struct CGF_ScriptAPI {
   /* State is owned by runtime. init/fini run only on first load/shutdown.
      Compatible reloads keep state; do not store DLL function/static pointers
      or DLL-owned resources in it. get_api must have no side effects. */
-  void (*init)(void *state, const CGF_API *engine);
-  void (*update)(void *state, const CGF_API *engine, float dt);
-  void (*render)(void *state, const CGF_API *engine);
-  void (*fini)(void *state, const CGF_API *engine);
+  void (*init)(void *state, const CGF_EngineAPI *engine);
+  void (*update)(void *state, const CGF_EngineAPI *engine, float dt);
+  void (*render)(void *state, const CGF_EngineAPI *engine);
+  void (*fini)(void *state, const CGF_EngineAPI *engine);
 } CGF_ScriptAPI;
 
-const CGF_API *engine_get_api(void);
+const CGF_EngineAPI *engine_get_api(void);
 bool engine_open_window(int width, int height, const char *title);
 
 bool engine_should_close(void);
@@ -62,5 +61,10 @@ void engine_close_window(void);
 
 /* Both API tables must change CGF_ABI_VERSION when their ABI changes. */
 CGF_EXPORT const CGF_ScriptAPI *script_get_api(void);
+
+///////////////////////////////////////////////////////////////////////////////
+// API REGISTRY
+///////////////////////////////////////////////////////////////////////////////
+#define CGF_ENGINE_API_NAME "cgf.engine"
 
 #endif
