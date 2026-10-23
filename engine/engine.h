@@ -26,22 +26,7 @@ typedef struct CGF_EngineAPI {
   void (*draw_text)(const char *text, int x, int y, int size, uint32_t color);
 } CGF_EngineAPI;
 
-typedef struct CGF_ScriptAPI {
-  uint32_t struct_size;
-  uint32_t abi_version;
-  uint32_t state_version;
-  size_t state_size;
-
-  /* State is owned by runtime. init/fini run only on first load/shutdown.
-     Compatible reloads keep state; do not store DLL function/static pointers
-     or DLL-owned resources in it. get_api must have no side effects. */
-  void (*init)(void *state, const CGF_EngineAPI *engine);
-  void (*update)(void *state, const CGF_EngineAPI *engine, float dt);
-  void (*render)(void *state, const CGF_EngineAPI *engine);
-  void (*fini)(void *state, const CGF_EngineAPI *engine);
-} CGF_ScriptAPI;
-
-const CGF_EngineAPI *engine_get_api(void);
+bool engine_register_api(const CGF_APIRegistry *registry);
 bool engine_open_window(int width, int height, const char *title);
 
 bool engine_should_close(void);
@@ -52,15 +37,6 @@ bool engine_key_pressed(CGF_Key key);
 void engine_begin_frame(float r, float g, float b);
 void engine_end_frame(void);
 void engine_close_window(void);
-
-#if defined(_WIN32) && defined(CGF_GAME_DLL)
-#define CGF_EXPORT __declspec(dllexport)
-#else
-#define CGF_EXPORT
-#endif
-
-/* Both API tables must change CGF_ABI_VERSION when their ABI changes. */
-CGF_EXPORT const CGF_ScriptAPI *script_get_api(void);
 
 ///////////////////////////////////////////////////////////////////////////////
 // API REGISTRY

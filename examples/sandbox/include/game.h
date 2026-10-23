@@ -11,4 +11,8 @@ typedef struct SandboxAPI {
   void (*shutdown)(void);
 } SandboxAPI;
 
+/* Registers the game API and reconnects this DLL to persistent state.
+   Repeated loads preserve state; shutdown is called only at runtime exit. */
+CGF_PLUGIN_EXPORT bool cgf_sandbox_load(const CGF_APIRegistry *registry);
+
 #endif

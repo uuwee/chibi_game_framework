@@ -19,11 +19,6 @@ static bool keys[CGF_KEY_COUNT];
 static bool pressed[CGF_KEY_COUNT];
 static LARGE_INTEGER frequency, last_time;
 
-bool engine_register_api(const CGF_APIRegistry *registry) {
-  return registry->set(CGF_ENGINE_API_NAME, sizeof(CGF_EngineAPI),
-                       engine_get_api());
-}
-
 static void log_message(const char *message) {
   puts(message);
   fflush(stdout);
@@ -132,7 +127,7 @@ static void draw_text(const char *text, int x, int y, int size,
   DeleteObject(font);
 }
 
-const CGF_EngineAPI *engine_get_api(void) {
+bool engine_register_api(const CGF_APIRegistry *registry) {
   static const CGF_EngineAPI api = {
       .struct_size = sizeof(CGF_EngineAPI),
       .log = log_message,
@@ -140,7 +135,7 @@ const CGF_EngineAPI *engine_get_api(void) {
       .draw_rect = draw_rect,
       .draw_text = draw_text,
   };
-  return &api;
+  return registry && registry->set(CGF_ENGINE_API_NAME, sizeof(api), &api);
 }
 
 void engine_reset_clock(void) {
