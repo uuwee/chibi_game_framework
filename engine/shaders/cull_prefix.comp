@@ -1,0 +1,20 @@
+#version 460
+// Assigns each draw a contiguous range of the visible instance list and
+// resets its count so the writing pass can fill the range.
+#include "common.glsl"
+
+layout(local_size_x = 1) in;
+
+void main() {
+  uint mesh_count = pc.render.mesh_count;
+  uint offset = 0u;
+  for (uint pipeline = 0u; pipeline < PIPELINE_KIND_COUNT; pipeline++) {
+    for (uint mesh = 0u; mesh < mesh_count; mesh++) {
+      uint index = pipeline * pc.render.mesh_capacity + mesh;
+      uint count = pc.render.draws.data[index].instance_count;
+      pc.render.draws.data[index].first_instance = offset;
+      pc.render.draws.data[index].instance_count = 0u;
+      offset += count;
+    }
+  }
+}

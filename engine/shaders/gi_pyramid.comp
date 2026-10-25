@@ -1,0 +1,43 @@
+#version 460
+// Builds one level of the radiance and depth pyramid traced by the radiance
+// cascades. Level 0 holds the direct radiance and view depth of each pixel;
+// each further level halves the resolution, averaging the radiance of the
+// surfaces it covers and keeping the nearest depth. Coarse levels prefilter
+// small bright surfaces so that long rays see them as stable averages.
+#include "common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+void main() {
+  uint level = pc.cascade;
+  ivec2 size = imageSize(pyramid_levels[level]);
+  ivec2 texel = ivec2(gl_GlobalInvocationID.xy);
+  if (any(greaterThanEqual(texel, size)))
+    return;
+
+  vec4 result = vec4(0.0, 0.0, 0.0, SKY_DEPTH);
+  if (level == 0u) {
+    float depth = texelFetch(depth_texture, texel, 0).r;
+    if (depth < 1.0) {
+      vec2 ndc = (vec2(texel) + 0.5) / vec2(pc.render.screen_size) * 2.0 - 1.0;
+      result = vec4(imageLoad(hdr_image, texel).rgb,
+                    ndc_view_depth(depth_rows(), ndc, depth));
+    }
+  } else {
+    ivec2 lower_size = imageSize(pyramid_levels[level - 1u]);
+    vec3 sum = vec3(0.0);
+    float count = 0.0;
+    for (int i = 0; i < 4; i++) {
+      ivec2 lower = min(texel * 2 + ivec2(i & 1, i >> 1), lower_size - 1);
+      vec4 value = imageLoad(pyramid_levels[level - 1u], lower);
+      if (value.a >= SKY_DEPTH)
+        continue;
+      sum += value.rgb;
+      count += 1.0;
+      result.a = min(result.a, value.a);
+    }
+    if (count > 0.0)
+      result.rgb = sum / count;
+  }
+  imageStore(pyramid_levels[level], texel, result);
+}

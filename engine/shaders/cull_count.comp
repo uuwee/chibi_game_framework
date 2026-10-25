@@ -1,0 +1,18 @@
+#version 460
+// Counts the visible instances of each draw.
+#include "cull_common.glsl"
+
+void main() {
+  uint index = gl_GlobalInvocationID.x;
+  if (index >= pc.render.entry_count)
+    return;
+  uint instance_index = pc.render.entries.data[index];
+  Instance instance = pc.render.instances.data[instance_index];
+  Mesh mesh = pc.render.meshes.data[instance.mesh];
+  if (!instance_visible(instance, mesh))
+    return;
+  uint pipeline = pc.render.materials.data[instance.material].pipeline;
+  atomicAdd(pc.render.draws.data[draw_index(pipeline, instance.mesh)]
+                .instance_count,
+            1u);
+}

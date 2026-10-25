@@ -1,24 +1,8 @@
 #include "build.h"
+#include "targets.h"
 
 #include <stdio.h>
 #include <string.h>
-
-static const BuildTarget target_self = {
-    .type = BUILD_TYPE_EXE,
-    .name = "build_runner",
-    .source = (const char *[]){"buildsys/build.c", "buildsys/main.c"},
-    .source_count = 2,
-    .output = ".build/bin/build-next.exe",
-};
-
-static const BuildTarget target_runtime = {
-    .type = BUILD_TYPE_EXE,
-    .name = "runtime",
-    .source = (const char *[]){"runtime/main.c", "runtime/api_registry.c",
-                               "runtime/plugin.c", "buildsys/build.c", "engine/engine.c"},
-    .source_count = 5,
-    .output = ".build/bin/runtime.exe",
-};
 
 int main(int argc, char **argv) {
   const char *command = "all";
@@ -40,14 +24,26 @@ int main(int argc, char **argv) {
     return build_target(&target_runtime);
   }
 
+  if (strcmp(command, "sandbox") == 0) {
+    return build_target(&target_sandbox);
+  }
+
+  if (strcmp(command, "renderer") == 0) {
+    return build_target(&target_renderer);
+  }
+
   if (strcmp(command, "all") == 0) {
     if (build_target(&target_self)) {
       return 1;
     }
 
-    return build_target(&target_runtime);
+    if (build_target(&target_runtime)) {
+      return 1;
+    }
+
+    return build_target(&target_renderer);
   }
 
-  printf("Usage: build [self | runtime | all]\n");
+  printf("Usage: build [self | runtime | sandbox | renderer | all]\n");
   return 1;
 }

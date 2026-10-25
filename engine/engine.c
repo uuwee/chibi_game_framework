@@ -36,6 +36,24 @@ static int map_key(WPARAM key) {
     return CGF_KEY_DOWN;
   case VK_F5:
     return CGF_KEY_F5;
+  case VK_F6:
+    return CGF_KEY_F6;
+  case 'W':
+    return CGF_KEY_W;
+  case 'A':
+    return CGF_KEY_A;
+  case 'S':
+    return CGF_KEY_S;
+  case 'D':
+    return CGF_KEY_D;
+  case 'Q':
+    return CGF_KEY_Q;
+  case 'E':
+    return CGF_KEY_E;
+  case VK_SHIFT:
+    return CGF_KEY_SHIFT;
+  case 'P':
+    return CGF_KEY_P;
   default:
     return -1;
   }
@@ -70,10 +88,10 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wparam,
   case WM_ERASEBKGND:
     return 1;
   case WM_PAINT: {
+    /* The window is presented every frame (by GDI or by the renderer), so
+       painting only validates the region. */
     PAINTSTRUCT paint;
-    HDC dc = BeginPaint(hwnd, &paint);
-    if (frame_dc)
-      BitBlt(dc, 0, 0, frame_width, frame_height, frame_dc, 0, 0, SRCCOPY);
+    BeginPaint(hwnd, &paint);
     EndPaint(hwnd, &paint);
     return 0;
   }
@@ -127,6 +145,23 @@ static void draw_text(const char *text, int x, int y, int size,
   DeleteObject(font);
 }
 
+static void window_size(uint32_t *width, uint32_t *height) {
+  RECT rect = {0};
+  if (!window || IsIconic(window) || !GetClientRect(window, &rect))
+    rect = (RECT){0};
+  if (width)
+    *width = (uint32_t)(rect.right - rect.left);
+  if (height)
+    *height = (uint32_t)(rect.bottom - rect.top);
+}
+
+static void native_window(void **instance, void **hwnd) {
+  if (instance)
+    *instance = window ? (void *)GetModuleHandleW(NULL) : NULL;
+  if (hwnd)
+    *hwnd = (void *)window;
+}
+
 bool engine_register_api(const CGF_APIRegistry *registry) {
   static const CGF_EngineAPI api = {
       .struct_size = sizeof(CGF_EngineAPI),
@@ -134,6 +169,8 @@ bool engine_register_api(const CGF_APIRegistry *registry) {
       .key_down = key_down,
       .draw_rect = draw_rect,
       .draw_text = draw_text,
+      .window_size = window_size,
+      .native_window = native_window,
   };
   return registry && registry->set(CGF_ENGINE_API_NAME, sizeof(api), &api);
 }
@@ -167,7 +204,7 @@ bool engine_open_window(int width, int height, const char *title) {
   if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
     return false;
 
-  DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+  DWORD style = WS_OVERLAPPEDWINDOW;
   RECT bounds = {0, 0, width, height};
   if (!AdjustWindowRect(&bounds, style, FALSE))
     return false;

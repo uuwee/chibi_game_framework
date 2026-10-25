@@ -1,0 +1,81 @@
+#version 460
+// Forward+ light culling. Each workgroup builds the light list of one screen
+// tile. Lights are tested against the tile's side planes and against the
+// farthest opaque depth in the tile; there is no near bound, so transparent
+// geometry in front of the opaque surfaces is still lit.
+#include "common.glsl"
+
+layout(local_size_x = TILE_SIZE, local_size_y = TILE_SIZE) in;
+
+shared uint farthest_bits;
+shared uint list_count;
+shared uint list[MAX_LIGHTS_PER_TILE];
+
+void main() {
+  uvec2 tile = gl_WorkGroupID.xy;
+  uvec2 screen = pc.render.screen_size;
+  uint local_index = gl_LocalInvocationIndex;
+  vec3 camera = pc.render.camera_position.xyz;
+
+  // Forward axis of the camera, from the screen center.
+  vec3 forward = normalize(
+      reconstruct_position(vec2(screen) * 0.5, 1.0) - camera);
+
+  if (local_index == 0u) {
+    farthest_bits = 0u;
+    list_count = 0u;
+  }
+  barrier();
+
+  uvec2 pixel = tile * TILE_SIZE + gl_LocalInvocationID.xy;
+  if (all(lessThan(pixel, screen))) {
+    float depth = texelFetch(depth_texture, ivec2(pixel), 0).r;
+    // Sky pixels have no bound: anything along their rays may be lit.
+    float distance = 3.0e38;
+    if (depth < 1.0)
+      distance = dot(reconstruct_position(vec2(pixel) + 0.5, depth) - camera,
+                     forward);
+    atomicMax(farthest_bits, floatBitsToUint(max(distance, 0.0)));
+  }
+  barrier();
+  float farthest = uintBitsToFloat(farthest_bits);
+
+  // Side planes through the camera and the tile corners, facing inward.
+  vec2 lo = vec2(tile * TILE_SIZE);
+  vec2 hi = min(vec2((tile + 1u) * TILE_SIZE), vec2(screen));
+  vec3 corners[4] = vec3[4](
+      reconstruct_position(vec2(lo.x, lo.y), 1.0) - camera,
+      reconstruct_position(vec2(hi.x, lo.y), 1.0) - camera,
+      reconstruct_position(vec2(hi.x, hi.y), 1.0) - camera,
+      reconstruct_position(vec2(lo.x, hi.y), 1.0) - camera);
+  vec3 center_ray = corners[0] + corners[1] + corners[2] + corners[3];
+  vec3 planes[4];
+  for (int i = 0; i < 4; i++) {
+    vec3 normal = normalize(cross(corners[i], corners[(i + 1) % 4]));
+    planes[i] = dot(normal, center_ray) < 0.0 ? -normal : normal;
+  }
+
+  for (uint i = local_index; i < pc.render.light_count;
+       i += TILE_SIZE * TILE_SIZE) {
+    Light light = pc.render.lights.data[i];
+    vec3 to_light = light.position_radius.xyz - camera;
+    float radius = light.position_radius.w;
+    bool inside = dot(to_light, forward) - radius <= farthest;
+    for (int p = 0; p < 4 && inside; p++)
+      inside = dot(planes[p], to_light) >= -radius;
+    if (inside) {
+      uint slot = atomicAdd(list_count, 1u);
+      if (slot < MAX_LIGHTS_PER_TILE)
+        list[slot] = i;
+    }
+  }
+  barrier();
+
+  uint count = min(list_count, MAX_LIGHTS_PER_TILE);
+  uint base = (tile.y * pc.render.tile_count.x + tile.x) *
+              (MAX_LIGHTS_PER_TILE + 1u);
+  if (local_index == 0u)
+    pc.render.tile_lights.data[base] = count;
+  for (uint i = local_index; i < count; i += TILE_SIZE * TILE_SIZE)
+    pc.render.tile_lights.data[base + 1u + i] = list[i];
+}

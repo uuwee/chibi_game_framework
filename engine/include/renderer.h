@@ -20,6 +20,7 @@ typedef CGF_ID CGF_Scene;
 typedef CGF_ID CGF_Instance;
 typedef CGF_ID CGF_Mesh;
 typedef CGF_ID CGF_Material;
+typedef CGF_ID CGF_Light;
 
 /* 行列はすべて列優先 (column-major) の 4x4 で、GLSL / Slang の mat4
    と同じ並び。 クリップ空間は Vulkan の規約（Y 下向き、深度 0..1）に従う。 */
@@ -84,8 +85,23 @@ typedef struct CGF_MaterialData {
   bool double_sided; /* true なら裏面も描画する */
 
   /* パラメータ */
-  float base_color[4]; /* RGBA、リニア */
+  float base_color[4]; /* RGBA、リニア。A は ALPHA ブレンドのときの不透明度 */
+  float emissive[3];   /* 自己発光の放射輝度（RGB、リニア）。周囲も照らす */
 } CGF_MaterialData;
+
+/* 点光源の元データ。 */
+typedef struct CGF_LightData {
+  float position[3]; /* ワールド座標 */
+  float radius;      /* 光が届く最大距離。これより遠くは照らさない */
+  float color[3];    /* RGB、リニア */
+  float intensity;   /* 明るさ。color に掛けられる */
+} CGF_LightData;
+
+/* 既存の点光源の更新。data のすべてのフィールドで置き換えられる。 */
+typedef struct CGF_LightUpdate {
+  CGF_Light light;
+  CGF_LightData data;
+} CGF_LightUpdate;
 
 typedef enum CGF_RenderResult {
   CGF_RENDER_OK = 0,
@@ -168,6 +184,20 @@ typedef struct CGF_EngineRendererAPI {
   void (*scene_remove)(CGF_Scene scene, const CGF_Instance *instance_list,
                        uint32_t count);
 
+  /* light_list の count 個の点光源をシーンに追加する。
+     1 つでも無効なハンドルがあれば CGF_RENDER_ERROR_INVALID_HANDLE を返し、
+     何も追加しない。
+     同じ点光源を同じシーンに重複して追加した場合の動作は未定義。 */
+  CGF_RenderResult (*scene_add_lights)(CGF_Scene scene,
+                                       const CGF_Light *light_list,
+                                       uint32_t count);
+
+  /* light_list の count 個の点光源をシーンから外す。
+     点光源自体は破棄されない。シーンに入っていない点光源や
+     破棄済みのハンドルは無視される。 */
+  void (*scene_remove_lights)(CGF_Scene scene, const CGF_Light *light_list,
+                              uint32_t count);
+
   /* ------------------------------------------------------------------------
      インスタンス: メッシュ・マテリアル・transform の組。
      作成した時点ではどのシーンにも入っていないので、描画するには scene_add
@@ -223,13 +253,32 @@ typedef struct CGF_EngineRendererAPI {
   void (*material_destroy)(CGF_Material material);
 
   /* ------------------------------------------------------------------------
+     点光源: 作成した時点ではどのシーンにも入っていないので、
+     照らすには scene_add_lights が必要。 */
+
+  /* data_list の count 個のデータから点光源を作成し、
+     out_light_list に同じ順でハンドルを書き込む。 */
+  CGF_RenderResult (*light_create)(const CGF_LightData *data_list,
+                                   uint32_t count, CGF_Light *out_light_list);
+
+  /* light_list の count 個の点光源を破棄する。
+     シーンに入ったままでも破棄してよく、破棄後はどのシーンも照らさない。 */
+  void (*light_destroy)(const CGF_Light *light_list, uint32_t count);
+
+  /* update_list の count 個の更新を適用する。
+     同じ点光源への更新が複数あるときは、リストの後ろにあるものが優先される。 */
+  CGF_RenderResult (*light_update)(const CGF_LightUpdate *update_list,
+                                   uint32_t count);
+
+  /* ------------------------------------------------------------------------
      フレーム */
 
-  /* フレームを開始し、ウィンドウ全体を
-     clear_color（RGBA、リニア）で塗りつぶす。 GPU
-     の処理が追いつくまで待つことがある。 ウィンドウに描画できない場合は
-     CGF_RENDER_NOT_VISIBLE を返す。 前のフレームの frame_end を呼ぶ前に呼ぶと
-     CGF_RENDER_ERROR_INVALID_STATE を返す。 */
+  /* フレームを開始し、ウィンドウ全体を clear_color（RGBA、リニア）で塗りつぶす。
+     clear_color の RGB は、このフレームでシーンを囲む環境（空）の明るさとしても
+     使われ、シーンを間接的に照らす。
+     GPU の処理が追いつくまで待つことがある。
+     ウィンドウに描画できない場合は CGF_RENDER_NOT_VISIBLE を返す。
+     前のフレームの frame_end を呼ぶ前に呼ぶと CGF_RENDER_ERROR_INVALID_STATE を返す。 */
   CGF_RenderResult (*frame_begin)(const float clear_color[4]);
 
   /* scene を camera の視点で、ウィンドウ全体に描画する。
