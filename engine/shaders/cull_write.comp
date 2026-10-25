@@ -4,16 +4,19 @@
 
 void main() {
   uint index = gl_GlobalInvocationID.x;
-  if (index >= pc.render.entry_count)
+  uint view = gl_GlobalInvocationID.y;
+  if (index >= render_data.entry_count)
     return;
-  uint instance_index = pc.render.entries.data[index];
-  Instance instance = pc.render.instances.data[instance_index];
-  Mesh mesh = pc.render.meshes.data[instance.mesh];
-  if (!instance_visible(instance, mesh))
+  uint instance_index = entries[render_data.entry_offset + index];
+  Instance instance = instances[instance_index];
+  Mesh mesh = meshes[instance.mesh];
+  uint pipeline = materials[instance.material].pipeline;
+  if (pipeline >= PIPELINE_TRANSPARENT ||
+      !instance_visible(instance, mesh, view))
     return;
-  uint pipeline = pc.render.materials.data[instance.material].pipeline;
-  uint draw = draw_index(pipeline, instance.mesh);
-  uint slot = atomicAdd(pc.render.draws.data[draw].instance_count, 1u);
-  pc.render.visible.data[pc.render.draws.data[draw].first_instance + slot] =
-      instance_index;
+  uint key = draw_key(view, pipeline, instance.mesh);
+  uint draw = (view * DRAW_KIND_COUNT + pipeline) * MAX_MESHES +
+              draw_keys[key * 2u + 1u];
+  uint slot = atomicAdd(draws[draw].instance_count, 1u);
+  visible[draws[draw].first_instance + slot] = instance_index;
 }

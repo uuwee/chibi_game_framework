@@ -1,0 +1,57 @@
+#version 460
+// Sorts the transparent instances in view from far to near (ties in scene
+// order) and gives each its own indirect draw, so they blend in a stable
+// order.
+#include "common.glsl"
+
+#define THREADS 1024u
+
+layout(local_size_x = THREADS) in;
+
+shared uvec2 keys[TRANSPARENT_CAPACITY];
+
+bool key_less(uvec2 a, uvec2 b) {
+  return a.x < b.x || (a.x == b.x && a.y < b.y);
+}
+
+void main() {
+  uint t = gl_LocalInvocationID.x;
+  uint count = min(counters[COUNTER_TRANSPARENT_FOUND], TRANSPARENT_CAPACITY);
+  for (uint i = t; i < TRANSPARENT_CAPACITY; i += THREADS)
+    keys[i] = i < count ? transparent_keys[i] : uvec2(0xFFFFFFFFu);
+  barrier();
+
+  // Bitonic sort.
+  for (uint size = 2u; size <= TRANSPARENT_CAPACITY; size <<= 1u) {
+    for (uint stride = size >> 1u; stride > 0u; stride >>= 1u) {
+      for (uint i = t; i < TRANSPARENT_CAPACITY; i += THREADS) {
+        uint j = i ^ stride;
+        if (j > i) {
+          bool ascending = (i & size) == 0u;
+          uvec2 a = keys[i];
+          uvec2 b = keys[j];
+          if (key_less(b, a) == ascending) {
+            keys[i] = b;
+            keys[j] = a;
+          }
+        }
+      }
+      barrier();
+    }
+  }
+
+  for (uint i = t; i < count; i += THREADS) {
+    uint instance_index = entries[render_data.entry_offset + keys[i].y];
+    Mesh mesh = meshes[instances[instance_index].mesh];
+    DrawCommand command;
+    command.index_count = mesh.index_count;
+    command.instance_count = 1u;
+    command.first_index = mesh.first_index;
+    command.vertex_offset = mesh.vertex_offset;
+    command.first_instance = TRANSPARENT_VISIBLE_BASE + i;
+    draws[TRANSPARENT_DRAW_BASE + i] = command;
+    visible[TRANSPARENT_VISIBLE_BASE + i] = instance_index;
+  }
+  if (t == 0u)
+    counters[COUNTER_TRANSPARENT_DRAWS] = count;
+}

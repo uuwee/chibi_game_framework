@@ -37,13 +37,15 @@ const BuildTarget target_renderer_shaders = {
         (const char *const[]){
             "engine/shaders/cull_reset.comp", "engine/shaders/cull_count.comp",
             "engine/shaders/cull_prefix.comp", "engine/shaders/cull_write.comp",
+            "engine/shaders/transparent_sort.comp",
             "engine/shaders/light_cull.comp", "engine/shaders/gi_pyramid.comp",
             "engine/shaders/gi_cascade.comp", "engine/shaders/gi_probe.comp",
             "engine/shaders/gi_probe_filter.comp", "engine/shaders/gi_apply.comp",
-            "engine/shaders/geometry.vert",
-            "engine/shaders/prepass.frag", "engine/shaders/forward.frag",
-            "engine/shaders/fullscreen.vert", "engine/shaders/tonemap.frag",
-            NULL},
+            "engine/shaders/env_prefilter.comp",
+            "engine/shaders/env_irradiance.comp", "engine/shaders/geometry.vert",
+            "engine/shaders/shadow.frag", "engine/shaders/prepass.frag",
+            "engine/shaders/forward.frag", "engine/shaders/fullscreen.vert",
+            "engine/shaders/tonemap.frag", NULL},
 };
 
 const BuildTarget target_renderer = {
@@ -61,4 +63,15 @@ const BuildTarget target_renderer = {
     .defines = (const char *const[]){"CGF_PLUGIN_DLL",
                                      "VK_USE_PLATFORM_WIN32_KHR", NULL},
     .dependencies = (const BuildTarget *const[]){&target_renderer_shaders, NULL},
+};
+
+const BuildTarget target_loader = {
+    .type = BUILD_TYPE_DLL,
+    .name = "loader",
+    .output = ".build/bin/loader.dll",
+    .sources = (const char *const[]){"engine/loader.c", "engine/loader_image.c",
+                                     "thirdparty/ufbx/ufbx.c", NULL},
+    .include_dirs = (const char *const[]){"engine", "thirdparty/ufbx", NULL},
+    .defines = (const char *const[]){"CGF_PLUGIN_DLL", NULL},
+    .optimize = true,
 };

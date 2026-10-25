@@ -220,12 +220,13 @@ static int prepare_directories(const char *object_directory) {
 }
 
 static int compile_unit(const BuildTarget *target, const CompileUnit *unit) {
-  static const char *const base_args[] = {
-      "cl.exe", "/nologo", "/W4", "/std:clatest", "/Od",
-      "/MD",    "/utf-8",  "/c",  "/Z7",          NULL};
+  static const char *const base_args[] = {"cl.exe", "/nologo", "/W4",
+                                          "/std:clatest", "/MD", "/utf-8",
+                                          "/c", "/Z7", NULL};
 
   CommandLine command = {0};
   int result = command_add_list(&command, "", base_args) ||
+               command_add(&command, "", target->optimize ? "/O2" : "/Od") ||
                command_add_list(&command, "/I", target->include_dirs) ||
                command_add_list(&command, "/D", target->defines) ||
                command_add(&command, "", unit->source) ||

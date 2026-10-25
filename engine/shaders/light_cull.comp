@@ -1,8 +1,9 @@
 #version 460
-// Forward+ light culling. Each workgroup builds the light list of one screen
-// tile. Lights are tested against the tile's side planes and against the
-// farthest opaque depth in the tile; there is no near bound, so transparent
-// geometry in front of the opaque surfaces is still lit.
+// Forward+ culling of the point lights. Each workgroup builds the light list
+// of one screen tile. Lights are tested against the tile's side planes and
+// against the farthest opaque depth in the tile; there is no near bound, so
+// transparent geometry in front of the opaque surfaces is still lit.
+// Directional lights reach every pixel and are not culled.
 #include "common.glsl"
 
 layout(local_size_x = TILE_SIZE, local_size_y = TILE_SIZE) in;
@@ -13,9 +14,9 @@ shared uint list[MAX_LIGHTS_PER_TILE];
 
 void main() {
   uvec2 tile = gl_WorkGroupID.xy;
-  uvec2 screen = pc.render.screen_size;
+  uvec2 screen = render_data.screen_size;
   uint local_index = gl_LocalInvocationIndex;
-  vec3 camera = pc.render.camera_position.xyz;
+  vec3 camera = render_data.camera_position.xyz;
 
   // Forward axis of the camera, from the screen center.
   vec3 forward = normalize(
@@ -55,9 +56,10 @@ void main() {
     planes[i] = dot(normal, center_ray) < 0.0 ? -normal : normal;
   }
 
-  for (uint i = local_index; i < pc.render.light_count;
+  for (uint i = local_index; i < render_data.point_light_count;
        i += TILE_SIZE * TILE_SIZE) {
-    Light light = pc.render.lights.data[i];
+    Light light =
+        lights[render_data.light_offset + render_data.directional_count + i];
     vec3 to_light = light.position_radius.xyz - camera;
     float radius = light.position_radius.w;
     bool inside = dot(to_light, forward) - radius <= farthest;
@@ -72,10 +74,10 @@ void main() {
   barrier();
 
   uint count = min(list_count, MAX_LIGHTS_PER_TILE);
-  uint base = (tile.y * pc.render.tile_count.x + tile.x) *
+  uint base = (tile.y * render_data.tile_count.x + tile.x) *
               (MAX_LIGHTS_PER_TILE + 1u);
   if (local_index == 0u)
-    pc.render.tile_lights.data[base] = count;
+    tile_lights[base] = count;
   for (uint i = local_index; i < count; i += TILE_SIZE * TILE_SIZE)
-    pc.render.tile_lights.data[base + 1u + i] = list[i];
+    tile_lights[base + 1u + i] = list[i];
 }

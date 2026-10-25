@@ -32,6 +32,10 @@ int main(int argc, char **argv) {
     return build_target(&target_renderer);
   }
 
+  if (strcmp(command, "loader") == 0) {
+    return build_target(&target_loader);
+  }
+
   if (strcmp(command, "all") == 0) {
     if (build_target(&target_self)) {
       return 1;
@@ -41,9 +45,13 @@ int main(int argc, char **argv) {
       return 1;
     }
 
-    return build_target(&target_renderer);
+    if (build_target(&target_renderer)) {
+      return 1;
+    }
+
+    return build_target(&target_loader);
   }
 
-  printf("Usage: build [self | runtime | sandbox | renderer | all]\n");
+  printf("Usage: build [self | runtime | sandbox | renderer | loader | all]\n");
   return 1;
 }

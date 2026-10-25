@@ -9,5 +9,6 @@ extern const BuildTarget target_runtime;
 extern const BuildTarget target_sandbox;
 extern const BuildTarget target_renderer_shaders;
 extern const BuildTarget target_renderer; /* builds its shaders first */
+extern const BuildTarget target_loader;
 
 #endif

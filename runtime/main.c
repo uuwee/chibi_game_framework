@@ -7,6 +7,7 @@
 #include "../buildsys/build.h"
 #include "../buildsys/targets.h"
 #include "../engine/engine.h"
+#include "../engine/include/loader_runtime.h"
 #include "../engine/include/renderer.h"
 #include "../engine/include/renderer_runtime.h"
 #include "../examples/sandbox/include/game.h"
@@ -58,18 +59,22 @@ int main(int argc, char **argv) {
   }
   CGF_Plugin *renderer =
       cgf_plugin_create(L".build/bin/renderer.dll", "cgf_renderer_load");
+  CGF_Plugin *loader =
+      cgf_plugin_create(L".build/bin/loader.dll", "cgf_loader_load");
   CGF_Plugin *sandbox =
       cgf_plugin_create(L".build/bin/game.dll", "cgf_sandbox_load");
-  if (!renderer || !sandbox) {
+  if (!renderer || !loader || !sandbox) {
     engine->log("[ERROR] cannot create plugins");
     cgf_plugin_close(sandbox);
+    cgf_plugin_close(loader);
     cgf_plugin_close(renderer);
     engine_close_window();
     cgf_api_registry_shutdown();
     return 1;
   }
-  /* renderer.dll is built by build.exe; load what is there. */
+  /* renderer.dll and loader.dll are built by build.exe; load what is there. */
   cgf_plugin_reload(renderer);
+  cgf_plugin_reload(loader);
   rebuild_plugin(sandbox, &target_sandbox, engine);
   engine_reset_clock();
 
@@ -81,7 +86,14 @@ int main(int argc, char **argv) {
       continue;
     }
     if (engine_key_pressed(CGF_KEY_F6)) {
+      /* Loading threads must not be inside the renderer while it reloads. */
+      const CGF_LoaderRuntimeAPI *loader_runtime = registry->get(
+          CGF_LOADER_RUNTIME_API_NAME, sizeof(CGF_LoaderRuntimeAPI));
+      if (loader_runtime)
+        loader_runtime->pause();
       rebuild_plugin(renderer, &target_renderer, engine);
+      if (loader_runtime)
+        loader_runtime->resume();
       engine_reset_clock();
       continue;
     }
@@ -111,6 +123,11 @@ int main(int argc, char **argv) {
   if (game)
     game->shutdown();
   cgf_plugin_close(sandbox);
+  const CGF_LoaderRuntimeAPI *loader_runtime = registry->get(
+      CGF_LOADER_RUNTIME_API_NAME, sizeof(CGF_LoaderRuntimeAPI));
+  if (loader_runtime)
+    loader_runtime->shutdown();
+  cgf_plugin_close(loader);
   const CGF_EngineRendererRuntimeAPI *renderer_runtime =
       registry->get(CGF_ENGINE_RENDERER_RUNTIME_API_NAME,
                     sizeof(CGF_EngineRendererRuntimeAPI));

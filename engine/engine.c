@@ -52,6 +52,12 @@ static int map_key(WPARAM key) {
     return CGF_KEY_E;
   case VK_SHIFT:
     return CGF_KEY_SHIFT;
+  case '1':
+    return CGF_KEY_1;
+  case '2':
+    return CGF_KEY_2;
+  case '3':
+    return CGF_KEY_3;
   case 'P':
     return CGF_KEY_P;
   default:

@@ -22,6 +22,9 @@ typedef enum CGF_Key {
   CGF_KEY_E,
   CGF_KEY_SHIFT,
   CGF_KEY_P,
+  CGF_KEY_1,
+  CGF_KEY_2,
+  CGF_KEY_3,
   CGF_KEY_COUNT,
 } CGF_Key;
 

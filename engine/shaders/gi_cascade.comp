@@ -11,13 +11,17 @@
 // next cascade, or the sky for the top one), then the four are averaged.
 // Sampling several directions per texel keeps small bright surfaces from
 // flickering in and out of a single ray.
+//
+// rgb holds the radiance and a the fraction of it that comes from the sky.
 #include "common.glsl"
+#include "surface.glsl"
+#include "lighting.glsl"
 
 layout(local_size_x = 8, local_size_y = 8) in;
 
 float interval_start(uint cascade) {
   // Interval lengths grow 4x per cascade: [0, L), [L, 5L), [5L, 21L), ...
-  return pc.render.gi_interval * (float(1u << (2u * cascade)) - 1.0) / 3.0;
+  return render_data.gi_interval * (float(1u << (2u * cascade)) - 1.0) / 3.0;
 }
 
 float noise(uvec2 texel) {
@@ -26,16 +30,23 @@ float noise(uvec2 texel) {
                fract(dot(vec2(texel), vec2(0.06711056, 0.00583715))));
 }
 
+// Level of the prefiltered environment that matches the solid angle of one
+// sub-direction of the cascade.
+float sky_lod(uint directions) {
+  float texels = float(ENV_CUBE_SIZE) * sqrt(6.0) / float(directions * 2u);
+  return clamp(log2(max(texels, 1.0)), 0.0, float(ENV_CUBE_MIPS - 1u));
+}
+
 // Marches [t0, t1) from origin through the given pyramid level. rgb:
 // radiance found, a: transmittance (1 when nothing was hit). Positions are
 // linear in clip space and view depth is linear along the ray, so each step
 // needs no matrix product, and one load returns both radiance and depth.
 vec4 trace(vec3 origin, vec3 direction, float t0, float t1, uint steps,
            float jitter, DepthRows rows, uint level) {
-  vec2 screen = vec2(pc.render.screen_size);
+  vec2 screen = vec2(render_data.screen_size);
   vec2 level_size = vec2(imageSize(pyramid_levels[level]));
-  vec4 clip_origin = pc.render.view_projection * vec4(origin, 1.0);
-  vec4 clip_direction = pc.render.view_projection * vec4(direction, 0.0);
+  vec4 clip_origin = render_data.view_projection * vec4(origin, 1.0);
+  vec4 clip_direction = render_data.view_projection * vec4(direction, 0.0);
   float depth_origin = world_view_depth(rows, origin);
   float depth_direction = dot(rows.view.xyz, direction) * rows.sign;
   float step_length = (t1 - t0) / float(steps);
@@ -54,7 +65,7 @@ vec4 trace(vec3 origin, vec3 direction, float t0, float t1, uint steps,
       continue;
     float behind = depth_origin + depth_direction * t - scene.a;
     if (behind > 0.0 && behind < thickness) {
-      vec3 normal = imageLoad(normal_image, ivec2(uv * screen)).xyz;
+      vec3 normal = load_normal(ivec2(uv * screen));
       if (dot(normal, direction) > 0.1)
         continue; // back side of a surface; keep looking
       return vec4(scene.rgb, 0.0);
@@ -63,37 +74,39 @@ vec4 trace(vec3 origin, vec3 direction, float t0, float t1, uint steps,
   return vec4(0.0, 0.0, 0.0, 1.0);
 }
 
-
 void main() {
-  uint cascade = pc.cascade;
+  uint cascade = pc.value;
   uint spacing = GI_PROBE_SPACING << cascade;
   uint directions = GI_DIRECTIONS << cascade;
-  uvec2 screen = pc.render.screen_size;
-  uvec2 probes = (screen + spacing - 1u) / spacing;
+  uvec2 screen = render_data.screen_size;
+  uvec2 probes_size = (screen + spacing - 1u) / spacing;
   uvec2 texel = gl_GlobalInvocationID.xy;
-  if (any(greaterThanEqual(texel, probes * directions)))
+  if (any(greaterThanEqual(texel, probes_size * directions)))
     return;
 
   uvec2 probe = texel / directions;
   uvec2 cell = texel % directions;
-  vec3 sky = pc.render.sky.rgb;
+  float lod = sky_lod(directions);
 
   ivec2 probe_pixel = ivec2(min(probe * spacing + spacing / 2u, screen - 1u));
   float depth = texelFetch(depth_texture, probe_pixel, 0).r;
   if (depth >= 1.0) {
-    imageStore(cascade_images[cascade], ivec2(texel), vec4(sky, 0.0));
+    vec3 direction =
+        octahedral_decode((vec2(cell) + 0.5) / float(directions));
+    imageStore(cascade_images[cascade], ivec2(texel),
+               vec4(environment_radiance(direction, lod), 1.0));
     return;
   }
 
-  vec3 camera = pc.render.camera_position.xyz;
+  vec3 camera = render_data.camera_position.xyz;
   vec3 position = reconstruct_position(vec2(probe_pixel) + 0.5, depth);
-  vec3 normal = imageLoad(normal_image, probe_pixel).xyz;
+  vec3 normal = load_normal(probe_pixel);
   float probe_distance = distance(position, camera);
   vec3 origin = position + normal * 0.03;
 
   // The four nearest probes of the next cascade, with bilinear weights
   // reduced for probes whose depth differs from this probe's.
-  bool merge = cascade + 1u < pc.render.cascade_count;
+  bool merge = cascade + 1u < render_data.cascade_count;
   uint upper = cascade + 1u;
   uint upper_spacing = spacing * 2u;
   uint upper_directions = directions * 2u;
@@ -134,26 +147,32 @@ void main() {
   DepthRows rows = depth_rows();
   // Finer cascades trace finer pyramid levels.
   uint level = min(cascade, GI_PYRAMID_LEVELS - 1u);
-  vec3 radiance = vec3(0.0);
+  vec4 result = vec4(0.0);
   for (uint sub = 0u; sub < 4u; sub++) {
     uvec2 child = cell * 2u + uvec2(sub & 1u, sub >> 1u);
     vec3 direction =
         octahedral_decode((vec2(child) + 0.5) / float(directions * 2u));
     vec4 near = trace(origin, direction, t0, t1, steps, jitter, rows, level);
-
-    vec3 far = sky;
-    if (near.a > 0.0 && merge) {
-      far = vec3(0.0);
+    if (near.a <= 0.0) {
+      result.rgb += near.rgb;
+      continue;
+    }
+    vec4 far;
+    if (merge) {
+      far = vec4(0.0);
       for (int i = 0; i < 4; i++) {
         ivec2 upper_texel = upper_probe[i] * int(upper_directions) +
                             ivec2(child);
-        far += imageLoad(cascade_images[upper], upper_texel).rgb *
+        far += imageLoad(cascade_images[upper], upper_texel) *
                upper_weight[i];
       }
       far /= weight_sum;
+    } else {
+      far = vec4(environment_radiance(direction, lod), 1.0);
     }
-    radiance += near.rgb + near.a * far;
+    result += vec4(near.rgb + near.a * far.rgb, near.a * far.a);
   }
 
-  imageStore(cascade_images[cascade], ivec2(texel), vec4(radiance * 0.25, 0.0));
+  imageStore(cascade_images[cascade], ivec2(texel),
+             min(result * 0.25, vec4(HALF_MAX)));
 }

@@ -9,7 +9,7 @@
 layout(local_size_x = 8, local_size_y = 8) in;
 
 void main() {
-  uint level = pc.cascade;
+  uint level = pc.value;
   ivec2 size = imageSize(pyramid_levels[level]);
   ivec2 texel = ivec2(gl_GlobalInvocationID.xy);
   if (any(greaterThanEqual(texel, size)))
@@ -19,7 +19,7 @@ void main() {
   if (level == 0u) {
     float depth = texelFetch(depth_texture, texel, 0).r;
     if (depth < 1.0) {
-      vec2 ndc = (vec2(texel) + 0.5) / vec2(pc.render.screen_size) * 2.0 - 1.0;
+      vec2 ndc = (vec2(texel) + 0.5) / vec2(render_data.screen_size) * 2.0 - 1.0;
       result = vec4(imageLoad(hdr_image, texel).rgb,
                     ndc_view_depth(depth_rows(), ndc, depth));
     }

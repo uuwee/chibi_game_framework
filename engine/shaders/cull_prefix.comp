@@ -1,20 +1,75 @@
 #version 460
-// Assigns each draw a contiguous range of the visible instance list and
-// resets its count so the writing pass can fill the range.
+// One workgroup per view. For each kind, gives every mesh with visible
+// instances a draw in a compact list, in mesh order, and a contiguous range
+// of the visible instance list of the view. The writing pass fills the
+// ranges.
 #include "common.glsl"
 
-layout(local_size_x = 1) in;
+#define THREADS 1024u
+
+layout(local_size_x = THREADS) in;
+
+shared uint scan_instances[THREADS];
+shared uint scan_draws[THREADS];
+shared uint base_instance;
 
 void main() {
-  uint mesh_count = pc.render.mesh_count;
-  uint offset = 0u;
-  for (uint pipeline = 0u; pipeline < PIPELINE_KIND_COUNT; pipeline++) {
-    for (uint mesh = 0u; mesh < mesh_count; mesh++) {
-      uint index = pipeline * pc.render.mesh_capacity + mesh;
-      uint count = pc.render.draws.data[index].instance_count;
-      pc.render.draws.data[index].first_instance = offset;
-      pc.render.draws.data[index].instance_count = 0u;
-      offset += count;
+  uint view = gl_WorkGroupID.x;
+  uint t = gl_LocalInvocationID.x;
+  uint mesh_count = render_data.mesh_count;
+  uint chunk = (mesh_count + THREADS - 1u) / THREADS;
+  uint begin = min(t * chunk, mesh_count);
+  uint end = min(begin + chunk, mesh_count);
+  if (t == 0u)
+    base_instance = view * MAX_INSTANCES;
+  barrier();
+
+  for (uint kind = 0u; kind < DRAW_KIND_COUNT; kind++) {
+    uint list = view * DRAW_KIND_COUNT + kind;
+    uint key_base = list * MAX_MESHES;
+    uint local_instances = 0u;
+    uint local_draws = 0u;
+    for (uint m = begin; m < end; m++) {
+      uint count = draw_keys[(key_base + m) * 2u];
+      local_instances += count;
+      local_draws += count > 0u ? 1u : 0u;
     }
+    scan_instances[t] = local_instances;
+    scan_draws[t] = local_draws;
+    barrier();
+    for (uint offset = 1u; offset < THREADS; offset <<= 1u) {
+      uint instances_before = t >= offset ? scan_instances[t - offset] : 0u;
+      uint draws_before = t >= offset ? scan_draws[t - offset] : 0u;
+      barrier();
+      scan_instances[t] += instances_before;
+      scan_draws[t] += draws_before;
+      barrier();
+    }
+
+    uint first_instance = base_instance + scan_instances[t] - local_instances;
+    uint slot = scan_draws[t] - local_draws;
+    for (uint m = begin; m < end; m++) {
+      uint key = key_base + m;
+      uint count = draw_keys[key * 2u];
+      if (count == 0u)
+        continue;
+      Mesh mesh = meshes[m];
+      DrawCommand command;
+      command.index_count = mesh.index_count;
+      command.instance_count = 0u;
+      command.first_index = mesh.first_index;
+      command.vertex_offset = mesh.vertex_offset;
+      command.first_instance = first_instance;
+      draws[key_base + slot] = command;
+      draw_keys[key * 2u + 1u] = slot;
+      slot++;
+      first_instance += count;
+    }
+    barrier();
+    if (t == THREADS - 1u) {
+      counters[list] = scan_draws[t];
+      base_instance += scan_instances[t];
+    }
+    barrier();
   }
 }

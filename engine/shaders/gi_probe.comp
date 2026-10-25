@@ -1,21 +1,22 @@
 #version 460
 // Projects the radiance of each cascade 0 probe over the hemisphere of its
 // surface onto L1 spherical harmonics, so that pixels can evaluate the
-// irradiance for their own normal with a few multiply-adds. Writes the
-// unfiltered probes; gi_probe_filter smooths them.
+// irradiance for their own normal with a few multiply-adds. Also records the
+// fraction of the hemisphere that sees the sky. Writes the unfiltered
+// probes; gi_probe_filter smooths them.
 #include "common.glsl"
 
 layout(local_size_x = 64) in;
 
 void main() {
-  uvec2 screen = pc.render.screen_size;
+  uvec2 screen = render_data.screen_size;
   uint spacing = GI_PROBE_SPACING;
   uint directions = GI_DIRECTIONS;
-  uvec2 probes = (screen + spacing - 1u) / spacing;
+  uvec2 probe_count = (screen + spacing - 1u) / spacing;
   uint index = gl_GlobalInvocationID.x;
-  if (index >= probes.x * probes.y)
+  if (index >= probe_count.x * probe_count.y)
     return;
-  uvec2 probe = uvec2(index % probes.x, index / probes.x);
+  uvec2 probe = uvec2(index % probe_count.x, index / probe_count.x);
 
   Probe result;
   result.position = vec4(0.0);
@@ -25,30 +26,34 @@ void main() {
   ivec2 probe_pixel = ivec2(min(probe * spacing + spacing / 2u, screen - 1u));
   float depth = texelFetch(depth_texture, probe_pixel, 0).r;
   if (depth < 1.0) {
-    vec3 normal = imageLoad(normal_image, probe_pixel).xyz;
+    vec3 normal = load_normal(probe_pixel);
     result.position =
         vec4(reconstruct_position(vec2(probe_pixel) + 0.5, depth), 1.0);
     // Each direction cell covers about 4 pi / directions^2 steradians.
     float solid_angle = 4.0 * PI / float(directions * directions);
+    float sky = 0.0;
     for (uint b = 0u; b < directions; b++) {
       for (uint a = 0u; a < directions; a++) {
         vec3 direction =
             octahedral_decode((vec2(a, b) + 0.5) / float(directions));
-        if (dot(direction, normal) <= 0.0)
+        float cosine = dot(direction, normal);
+        if (cosine <= 0.0)
           continue;
-        vec3 radiance =
-            imageLoad(cascade_images[0], ivec2(probe * directions + uvec2(a, b)))
-                .rgb *
-            solid_angle;
+        vec4 value = imageLoad(cascade_images[0],
+                               ivec2(probe * directions + uvec2(a, b)));
+        vec3 radiance = value.rgb * solid_angle;
         result.sh[0].rgb += radiance * 0.282095;
         result.sh[1].rgb += radiance * 0.488603 * direction.y;
         result.sh[2].rgb += radiance * 0.488603 * direction.z;
         result.sh[3].rgb += radiance * 0.488603 * direction.x;
+        sky += value.a * cosine * solid_angle;
       }
     }
+    // Cosine-weighted, so a fully open hemisphere gives 1.
+    result.sh[0].w = sky / PI;
     result.sh[1].w = normal.x;
     result.sh[2].w = normal.y;
     result.sh[3].w = normal.z;
   }
-  pc.render.probes.data[index] = result;
+  probes[index] = result;
 }

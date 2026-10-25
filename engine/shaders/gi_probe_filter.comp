@@ -9,28 +9,31 @@
 layout(local_size_x = 64) in;
 
 void main() {
-  uvec2 screen = pc.render.screen_size;
+  uvec2 screen = render_data.screen_size;
   uint spacing = GI_PROBE_SPACING;
-  uvec2 probes = (screen + spacing - 1u) / spacing;
-  uint count = probes.x * probes.y;
+  uvec2 probe_count = (screen + spacing - 1u) / spacing;
+  uint count = probe_count.x * probe_count.y;
   uint index = gl_GlobalInvocationID.x;
   if (index >= count)
     return;
-  ivec2 probe = ivec2(index % probes.x, index / probes.x);
+  ivec2 probe = ivec2(index % probe_count.x, index / probe_count.x);
 
-  Probe center = pc.render.probes.data[index];
+  Probe center = probes[index];
   Probe result = center;
   if (center.position.w != 0.0) {
     vec3 normal = vec3(center.sh[1].w, center.sh[2].w, center.sh[3].w);
-    float scale = distance(center.position.xyz, pc.render.camera_position.xyz);
-    vec3 sh[4] = vec3[4](vec3(0.0), vec3(0.0), vec3(0.0), vec3(0.0));
+    float scale =
+        distance(center.position.xyz, render_data.camera_position.xyz);
+    vec4 sh0 = vec4(0.0);
+    vec3 sh[3] = vec3[3](vec3(0.0), vec3(0.0), vec3(0.0));
     float weight_sum = 0.0;
     for (int y = -1; y <= 1; y++) {
       for (int x = -1; x <= 1; x++) {
         ivec2 q = probe + ivec2(x, y);
-        if (any(lessThan(q, ivec2(0))) || any(greaterThanEqual(q, ivec2(probes))))
+        if (any(lessThan(q, ivec2(0))) ||
+            any(greaterThanEqual(q, ivec2(probe_count))))
           continue;
-        Probe neighbor = pc.render.probes.data[q.y * int(probes.x) + q.x];
+        Probe neighbor = probes[q.y * int(probe_count.x) + q.x];
         if (neighbor.position.w == 0.0)
           continue;
         vec3 neighbor_normal =
@@ -41,13 +44,15 @@ void main() {
         float weight = (x == 0 ? 1.0 : 0.6) * (y == 0 ? 1.0 : 0.6) *
                        exp(-plane_distance * 40.0) *
                        pow(max(dot(normal, neighbor_normal), 0.0), 8.0);
-        for (int i = 0; i < 4; i++)
-          sh[i] += neighbor.sh[i].rgb * weight;
+        sh0 += neighbor.sh[0] * weight;
+        for (int i = 0; i < 3; i++)
+          sh[i] += neighbor.sh[i + 1].rgb * weight;
         weight_sum += weight;
       }
     }
-    for (int i = 0; i < 4; i++)
-      result.sh[i].rgb = sh[i] / weight_sum;
+    result.sh[0] = sh0 / weight_sum;
+    for (int i = 0; i < 3; i++)
+      result.sh[i + 1].rgb = sh[i] / weight_sum;
   }
-  pc.render.probes.data[count + index] = result;
+  probes[count + index] = result;
 }

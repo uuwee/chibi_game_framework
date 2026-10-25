@@ -1,6 +1,8 @@
 #ifndef CGF_BUILDSYS_BUILD_H
 #define CGF_BUILDSYS_BUILD_H
 
+#include <stdbool.h>
+
 typedef enum BuildType {
   BUILD_TYPE_EXE,
   BUILD_TYPE_DLL,
@@ -21,6 +23,7 @@ typedef struct BuildTarget {
   const char *const *defines;      /* optional, NAME or NAME=VALUE */
   const char *const *link_options; /* optional */
   const struct BuildTarget *const *dependencies; /* optional, built first */
+  bool optimize; /* compile C sources with /O2 instead of /Od */
 } BuildTarget;
 
 int build_target(const BuildTarget *target);

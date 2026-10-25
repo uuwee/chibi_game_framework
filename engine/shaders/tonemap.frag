@@ -26,12 +26,12 @@ vec3 heat(float t) {
 
 void main() {
   vec4 hdr = imageLoad(hdr_image, ivec2(gl_FragCoord.xy));
-  vec3 color = aces(hdr.rgb);
-  if (pc.render.debug_mode == DEBUG_MODE_LIGHTS && hdr.a > 0.0) {
+  vec3 color = aces(hdr.rgb * render_data.exposure);
+  if (render_data.debug_mode == DEBUG_MODE_LIGHTS && hdr.a > 0.0) {
     uvec2 tile = uvec2(gl_FragCoord.xy) / TILE_SIZE;
-    uint base = (tile.y * pc.render.tile_count.x + tile.x) *
+    uint base = (tile.y * render_data.tile_count.x + tile.x) *
                 (MAX_LIGHTS_PER_TILE + 1u);
-    float count = float(pc.render.tile_lights.data[base]);
+    float count = float(tile_lights[base]);
     color = mix(color, heat(count / 16.0), 0.6);
   }
   if (ENCODE_SRGB)

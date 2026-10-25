@@ -1,18 +1,31 @@
 #version 460
-// Counts the visible instances of each draw.
+// Counts the visible instances of each (view, kind, mesh), and collects the
+// transparent instances in view with their sort keys.
 #include "cull_common.glsl"
 
 void main() {
   uint index = gl_GlobalInvocationID.x;
-  if (index >= pc.render.entry_count)
+  uint view = gl_GlobalInvocationID.y;
+  if (index >= render_data.entry_count)
     return;
-  uint instance_index = pc.render.entries.data[index];
-  Instance instance = pc.render.instances.data[instance_index];
-  Mesh mesh = pc.render.meshes.data[instance.mesh];
-  if (!instance_visible(instance, mesh))
+  uint instance_index = entries[render_data.entry_offset + index];
+  Instance instance = instances[instance_index];
+  Mesh mesh = meshes[instance.mesh];
+  uint pipeline = materials[instance.material].pipeline;
+  bool transparent = pipeline >= PIPELINE_TRANSPARENT;
+  if (transparent && view != 0u)
+    return; // transparent surfaces cast no shadows
+  if (!instance_visible(instance, mesh, view))
     return;
-  uint pipeline = pc.render.materials.data[instance.material].pipeline;
-  atomicAdd(pc.render.draws.data[draw_index(pipeline, instance.mesh)]
-                .instance_count,
-            1u);
+  if (transparent) {
+    uint slot = atomicAdd(counters[COUNTER_TRANSPARENT_FOUND], 1u);
+    if (slot < TRANSPARENT_CAPACITY) {
+      vec3 center = (instance.transform * vec4(mesh.sphere.xyz, 1.0)).xyz;
+      float distance = length(center - render_data.camera_position.xyz);
+      // Ascending keys draw the farthest first; ties keep the scene order.
+      transparent_keys[slot] = uvec2(~floatBitsToUint(distance), index);
+    }
+    return;
+  }
+  atomicAdd(draw_keys[draw_key(view, pipeline, instance.mesh) * 2u], 1u);
 }

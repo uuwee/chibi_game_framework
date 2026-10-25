@@ -1,21 +1,16 @@
 #version 460
-// Initializes one indirect draw per (pipeline, mesh) with no instances.
+// Clears the per-(view, kind, mesh) instance counts and the draw counters.
 #include "cull_common.glsl"
 
 void main() {
   uint index = gl_GlobalInvocationID.x;
-  uint mesh_count = pc.render.mesh_count;
-  if (index >= PIPELINE_KIND_COUNT * mesh_count)
-    return;
-  uint pipeline = index / mesh_count;
-  uint mesh_index = index % mesh_count;
-  Mesh mesh = pc.render.meshes.data[mesh_index];
-
-  DrawCommand command;
-  command.index_count = mesh.index_count;
-  command.instance_count = 0u;
-  command.first_index = mesh.first_index;
-  command.vertex_offset = mesh.vertex_offset;
-  command.first_instance = 0u;
-  pc.render.draws.data[draw_index(pipeline, mesh_index)] = command;
+  uint mesh_count = render_data.mesh_count;
+  uint keys = render_data.view_count * DRAW_KIND_COUNT * mesh_count;
+  if (index < keys) {
+    uint key = (index / mesh_count) * MAX_MESHES + index % mesh_count;
+    draw_keys[key * 2u] = 0u;
+    draw_keys[key * 2u + 1u] = 0u;
+  } else if (index - keys < COUNTER_COUNT) {
+    counters[index - keys] = 0u;
+  }
 }

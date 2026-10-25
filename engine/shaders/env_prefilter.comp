@@ -1,0 +1,52 @@
+#version 460
+// Writes one level of the prefiltered radiance cube map. Level 0 is the
+// environment itself; level m is convolved with the GGX lobe of roughness
+// m / (ENV_CUBE_MIPS - 1), seen head-on, for the split-sum approximation.
+// Samples read coarser source levels where they stand for a larger solid
+// angle, so few samples give a smooth result.
+#include "env_common.glsl"
+
+#define SAMPLE_COUNT 64u
+
+void main() {
+  uint size = ENV_CUBE_SIZE >> pc.mip;
+  uvec3 id = gl_GlobalInvocationID;
+  if (id.x >= size || id.y >= size)
+    return;
+  vec3 n = cube_direction(id.z, (vec2(id.xy) + 0.5) / float(size));
+  float source_texel = source_texel_solid_angle();
+
+  vec3 color;
+  if (pc.mip == 0u) {
+    float texel = 4.0 * PI / (6.0 * float(size * size));
+    color = sample_source(n, max(0.5 * log2(texel / source_texel), 0.0));
+  } else {
+    float roughness = float(pc.mip) / float(ENV_CUBE_MIPS - 1u);
+    float alpha = roughness * roughness;
+    float alpha2 = alpha * alpha;
+    mat3 frame = tangent_frame(n);
+    vec3 sum = vec3(0.0);
+    float weight = 0.0;
+    for (uint i = 0u; i < SAMPLE_COUNT; i++) {
+      vec2 xi = hammersley(i, SAMPLE_COUNT);
+      float phi = 2.0 * PI * xi.x;
+      float cos_theta = sqrt((1.0 - xi.y) / (1.0 + (alpha2 - 1.0) * xi.y));
+      float sin_theta = sqrt(1.0 - cos_theta * cos_theta);
+      vec3 h = frame * vec3(sin_theta * cos(phi), sin_theta * sin(phi),
+                            cos_theta);
+      vec3 l = 2.0 * dot(n, h) * h - n;
+      float n_dot_l = dot(n, l);
+      if (n_dot_l <= 0.0)
+        continue;
+      // With the view along n, pdf(l) = D(h) / 4.
+      float d = cos_theta * cos_theta * (alpha2 - 1.0) + 1.0;
+      float pdf = alpha2 / (PI * d * d) / 4.0;
+      float sample_solid_angle = 1.0 / (float(SAMPLE_COUNT) * pdf);
+      float lod = max(0.5 * log2(sample_solid_angle / source_texel) + 1.0, 0.0);
+      sum += sample_source(l, lod) * n_dot_l;
+      weight += n_dot_l;
+    }
+    color = sum / max(weight, 1e-6);
+  }
+  imageStore(target, ivec3(id), vec4(color, 1.0));
+}
