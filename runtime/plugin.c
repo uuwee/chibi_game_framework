@@ -1,9 +1,9 @@
 #define WIN32_LEAN_AND_MEAN
-#include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <wchar.h>
+#include <windows.h>
 
 #include "api_registry.h"
 #include "plugin.h"
@@ -37,10 +37,13 @@ static void unload_module(LoadedModule *loaded) {
 }
 
 CGF_Plugin *cgf_plugin_create(const wchar_t *path, const char *entry_name) {
-  if (!path || !path[0] || !entry_name || !entry_name[0]) return NULL;
+  if (!path || !path[0] || !entry_name || !entry_name[0])
+    return NULL;
   CGF_Plugin *plugin = calloc(1, sizeof(*plugin));
-  if (!plugin) return NULL;
-  DWORD length = GetFullPathNameW(path, PLUGIN_PATH_MAX, plugin->source_path, NULL);
+  if (!plugin)
+    return NULL;
+  DWORD length =
+      GetFullPathNameW(path, PLUGIN_PATH_MAX, plugin->source_path, NULL);
   if (!length || length >= PLUGIN_PATH_MAX) {
     free(plugin);
     return NULL;
@@ -57,17 +60,23 @@ CGF_Plugin *cgf_plugin_create(const wchar_t *path, const char *entry_name) {
 
 bool cgf_plugin_reload(CGF_Plugin *plugin) {
   static unsigned long generation;
-  if (!plugin) return false;
+  if (!plugin)
+    return false;
   LoadedModule candidate = {0};
   /* Keep copies beside the source DLL, with process/instance-unique names.
-     Never load the build output itself: the linker must be able to replace it. */
-  for (;;) {
-    int length = swprintf(candidate.path, PLUGIN_PATH_MAX, L"%ls.%lu.%lu.dll",
-                          plugin->source_path, GetCurrentProcessId(), ++generation);
-    if (length < 0 || length >= PLUGIN_PATH_MAX) return false;
-    if (CopyFileW(plugin->source_path, candidate.path, TRUE)) break;
+     Never load the build output itself: the linker must be able to replace it.
+   */
+  while (true) {
+    int length =
+        swprintf(candidate.path, PLUGIN_PATH_MAX, L"%ls.%lu.%lu.dll",
+                 plugin->source_path, GetCurrentProcessId(), ++generation);
+    if (length < 0 || length >= PLUGIN_PATH_MAX)
+      return false;
+    if (CopyFileW(plugin->source_path, candidate.path, TRUE))
+      break;
     DWORD error = GetLastError();
-    if (error == ERROR_FILE_EXISTS || error == ERROR_ALREADY_EXISTS) continue;
+    if (error == ERROR_FILE_EXISTS || error == ERROR_ALREADY_EXISTS)
+      continue;
     windows_error("Copy plugin DLL");
     return false;
   }
@@ -106,7 +115,8 @@ fail:
 }
 
 void cgf_plugin_close(CGF_Plugin *plugin) {
-  if (!plugin) return;
+  if (!plugin)
+    return;
   unload_module(&plugin->loaded);
   free(plugin->entry_name);
   free(plugin);

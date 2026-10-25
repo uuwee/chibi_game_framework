@@ -12,7 +12,7 @@ typedef enum CGF_Key {
   CGF_KEY_RIGHT,
   CGF_KEY_UP,
   CGF_KEY_DOWN,
-  CGF_KEY_RELOAD,
+  CGF_KEY_F5,
   CGF_KEY_COUNT,
 } CGF_Key;
 

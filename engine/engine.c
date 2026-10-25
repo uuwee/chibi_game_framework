@@ -35,7 +35,7 @@ static int map_key(WPARAM key) {
   case VK_DOWN:
     return CGF_KEY_DOWN;
   case VK_F5:
-    return CGF_KEY_RELOAD;
+    return CGF_KEY_F5;
   default:
     return -1;
   }
